@@ -1,708 +1,452 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, TrendingUp, Edit3, Grid } from 'lucide-react';
-
-const DailyProductivityJournal = () => {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [entries, setEntries] = useState(() => {
-    try {
-      const saved = localStorage.getItem('productivity-journal-entries');
-      return saved ? JSON.parse(saved) : {};
-    } catch (error) {
-      console.error('Error loading saved entries:', error);
-      return {};
-    }
-  });
-  const [currentEntry, setCurrentEntry] = useState({
-    morningPriorities: ['', '', ''],
-    gratefulFor: ['', '', ''],
-    affirmation: '',
-    eveningWins: ['', '', ''],
-    improvements: ['', ''],
-    tomorrowFocus: ['', '', ''],
-    energyLevel: 3,
-    notes: ''
-  });
-  const [showTrends, setShowTrends] = useState(false);
-  const [showMonthly, setShowMonthly] = useState(false);
-  const [showWins, setShowWins] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(null);
-
-  const formatDate = (date) => {
-    return date.toISOString().split('T')[0];
-  };
-
-  const formatDisplayDate = (date) => {
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
-
-  // Load entry when date changes
-  useEffect(() => {
-    const dateKey = formatDate(currentDate);
-    if (entries[dateKey]) {
-      setCurrentEntry(entries[dateKey]);
-    } else {
-      // Check if yesterday has tomorrow's focus for today
-      const yesterday = new Date(currentDate);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayKey = formatDate(yesterday);
-      const yesterdayEntry = entries[yesterdayKey];
-      
-      const defaultEntry = {
-        morningPriorities: ['', '', ''],
-        gratefulFor: ['', '', ''],
-        affirmation: '',
-        eveningWins: ['', '', ''],
-        improvements: ['', ''],
-        tomorrowFocus: ['', '', ''],
-        energyLevel: 3,
-        notes: ''
-      };
-
-      // If yesterday has tomorrow's focus, use those as today's priorities
-      if (yesterdayEntry && yesterdayEntry.tomorrowFocus.some(focus => focus.trim())) {
-        defaultEntry.morningPriorities = [
-          yesterdayEntry.tomorrowFocus[0] || '',
-          yesterdayEntry.tomorrowFocus[1] || '',
-          yesterdayEntry.tomorrowFocus[2] || ''
-        ];
-      }
-
-      setCurrentEntry(defaultEntry);
-    }
-  }, [currentDate, entries]);
-
-  // Auto-save when entry changes
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      const dateKey = formatDate(currentDate);
-      const hasContent = currentEntry.morningPriorities.some(p => p.trim()) ||
-                        currentEntry.gratefulFor.some(g => g.trim()) ||
-                        currentEntry.affirmation.trim() ||
-                        currentEntry.eveningWins.some(w => w.trim()) ||
-                        currentEntry.improvements.some(i => i.trim()) ||
-                        currentEntry.tomorrowFocus.some(t => t.trim()) ||
-                        currentEntry.notes.trim();
-      
-      if (hasContent) {
-        const updatedEntries = {
-          ...entries,
-          [dateKey]: { ...currentEntry, lastUpdated: new Date().toISOString() }
-        };
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Productivity Journal</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9fafb; line-height: 1.6; }
         
-        setEntries(updatedEntries);
+        .container { max-width: 1024px; margin: 0 auto; padding: 1.5rem; background: white; min-height: 100vh; }
         
-        try {
-          localStorage.setItem('productivity-journal-entries', JSON.stringify(updatedEntries));
-        } catch (error) {
-          console.error('Auto-save error:', error);
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
+        .date-nav { display: flex; align-items: center; gap: 1rem; }
+        .nav-btn { padding: 0.5rem 1rem; border: none; border-radius: 0.5rem; cursor: pointer; font-size: 0.875rem; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; }
+        .nav-btn:hover { opacity: 0.8; }
+        .date-btn { padding: 0.5rem; border: none; border-radius: 50%; cursor: pointer; background: #f3f4f6; font-size: 1.2rem; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+        .date-btn:hover { background: #e5e7eb; }
+        .trends-btn { background: #dbeafe; color: #2563eb; }
+        
+        .grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        @media (min-width: 1024px) { .grid { grid-template-columns: 1fr 1fr; } }
+        
+        .section { padding: 1.5rem; border-radius: 0.75rem; border: 1px solid #e5e7eb; }
+        .morning { background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%); border-color: #f59e0b; }
+        .evening { background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); border-color: #8b5cf6; }
+        .tomorrow { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-color: #10b981; }
+        .notes { background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%); border-color: #6b7280; }
+        
+        .section h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .section h2 .emoji { font-size: 1.5rem; }
+        
+        .field { margin-bottom: 1rem; }
+        .label { display: block; font-weight: 500; color: #374151; margin-bottom: 0.5rem; font-size: 0.875rem; }
+        .input { width: 100%; padding: 0.75rem; border: 2px solid #d1d5db; border-radius: 0.5rem; font-size: 0.875rem; margin-bottom: 0.5rem; transition: all 0.2s; }
+        .input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        .textarea { width: 100%; padding: 0.75rem; border: 2px solid #d1d5db; border-radius: 0.5rem; resize: vertical; font-family: inherit; font-size: 0.875rem; }
+        .textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        
+        .energy-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; margin-top: 0.5rem; }
+        .energy-btn { padding: 0.75rem; border: 2px solid #d1d5db; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 1rem; }
+        .energy-btn:hover { transform: translateY(-1px); }
+        .energy-1 { background: #fee2e2; color: #dc2626; border-color: #dc2626; }
+        .energy-2 { background: #fef3c7; color: #d97706; border-color: #d97706; }
+        .energy-3 { background: #fed7aa; color: #ea580c; border-color: #ea580c; }
+        .energy-4 { background: #fef08a; color: #ca8a04; border-color: #ca8a04; }
+        .energy-5 { background: #dcfce7; color: #16a34a; border-color: #16a34a; }
+        .energy-unselected { background: #f9fafb; color: #6b7280; border-color: #d1d5db; }
+        
+        .energy-level { text-align: center; color: #7c3aed; font-weight: 500; margin-top: 0.75rem; font-size: 0.875rem; }
+        
+        .trends-view { max-width: 800px; margin: 0 auto; }
+        .back-btn { background: #dbeafe; color: #2563eb; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer; margin-bottom: 1.5rem; }
+        .back-btn:hover { background: #bfdbfe; }
+        
+        .entry-card { border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1rem; background: white; }
+        .entry-header { display: flex; justify-content: between; align-items: center; margin-bottom: 1rem; }
+        .entry-date { font-weight: 600; color: #374151; }
+        .energy-badge { background: #dbeafe; color: #2563eb; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; }
+        .entry-section { margin-bottom: 1rem; }
+        .entry-section:last-child { margin-bottom: 0; }
+        .entry-title { font-size: 0.875rem; font-weight: 500; color: #6b7280; margin-bottom: 0.5rem; }
+        .entry-list { list-style: none; }
+        .entry-list li { position: relative; padding-left: 1rem; margin-bottom: 0.25rem; color: #374151; font-size: 0.875rem; }
+        .entry-list li:before { content: '•'; position: absolute; left: 0; color: #6b7280; }
+        
+        @media (max-width: 640px) {
+            .container { padding: 1rem; }
+            .header { flex-direction: column; align-items: stretch; }
+            .date-nav { justify-content: center; }
+            .energy-buttons { grid-template-columns: repeat(5, 1fr); }
+            .energy-btn { padding: 0.5rem; font-size: 0.875rem; }
         }
-      }
-    }, 1000);
-
-    return () => clearTimeout(timeoutId);
-  }, [currentEntry, currentDate, entries]);
-
-  const navigateDate = (direction) => {
-    const newDate = new Date(currentDate);
-    newDate.setDate(newDate.getDate() + direction);
-    setCurrentDate(newDate);
-  };
-
-  const updateArrayField = (field, index, value) => {
-    setCurrentEntry(prev => ({
-      ...prev,
-      [field]: prev[field].map((item, i) => i === index ? value : item)
-    }));
-  };
-
-  const updateField = (field, value) => {
-    setCurrentEntry(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const generateMonthlyCalendar = () => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - firstDay.getDay());
-    
-    const days = [];
-    const current = new Date(startDate);
-    
-    while (current <= lastDay || days.length < 42) {
-      days.push(new Date(current));
-      current.setDate(current.getDate() + 1);
-      if (days.length >= 42) break;
-    }
-    
-    return days;
-  };
-
-  const getEntryForDate = (date) => {
-    return entries[formatDate(date)];
-  };
-
-  const calculateDayScore = (entry) => {
-    if (!entry) return 0;
-    
-    let score = 0;
-    score += entry.morningPriorities.filter(p => p.trim()).length * 0.5;
-    score += entry.gratefulFor.filter(g => g.trim()).length * 0.3;
-    score += entry.eveningWins.filter(w => w.trim()).length * 0.5;
-    score += entry.affirmation.trim() ? 0.5 : 0;
-    score += entry.energyLevel >= 4 ? 1 : entry.energyLevel >= 3 ? 0.5 : 0;
-    
-    return Math.min(score, 5);
-  };
-
-  const getMonthlyWins = (month, year) => {
-    return Object.entries(entries)
-      .filter(([date]) => {
-        const entryDate = new Date(date);
-        return entryDate.getMonth() === month && entryDate.getFullYear() === year;
-      })
-      .map(([date, entry]) => ({
-        date,
-        wins: entry.eveningWins.filter(w => w.trim())
-      }))
-      .filter(({ wins }) => wins.length > 0)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-  };
-
-  const calculateTrends = () => {
-    const sortedEntries = Object.entries(entries)
-      .sort(([a], [b]) => new Date(b) - new Date(a))
-      .slice(0, 7);
-
-    const avgEnergy = sortedEntries.reduce((sum, [, entry]) => sum + (entry.energyLevel || 3), 0) / sortedEntries.length || 3;
-    const completedEntries = sortedEntries.filter(([, entry]) => 
-      entry.morningPriorities.some(p => p.trim()) || entry.eveningWins.some(w => w.trim())
-    ).length;
-
-    return {
-      avgEnergy: avgEnergy.toFixed(1),
-      completedEntries,
-      totalDays: sortedEntries.length
-    };
-  };
-
-  if (showWins && selectedMonth) {
-    const monthlyWins = getMonthlyWins(selectedMonth.month, selectedMonth.year);
-    const monthName = new Date(selectedMonth.year, selectedMonth.month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-    return (
-      <div className="max-w-4xl mx-auto p-6 bg-white min-h-screen">
-        <div className="mb-6">
-          <button 
-            onClick={() => {
-              setShowWins(false);
-              setSelectedMonth(null);
-            }}
-            className="flex items-center text-blue-600 hover:text-blue-800 mb-4"
-          >
-            <ChevronLeft className="w-4 h-4 mr-2" />
-            Back to Monthly View
-          </button>
-          
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">{monthName} Wins</h1>
-          <p className="text-gray-600 mb-6">All your achievements this month</p>
-        </div>
-
-        <div className="space-y-6">
-          {monthlyWins.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500 text-lg">No wins recorded for {monthName}</p>
+    </style>
+</head>
+<body>
+    <div id="app" class="container">
+        <div class="header">
+            <div class="date-nav">
+                <button class="date-btn" onclick="navigateDate(-1)">‹</button>
+                <h1 id="currentDateDisplay" style="font-size: 1.5rem; font-weight: bold; min-width: 300px; text-align: center;"></h1>
+                <button class="date-btn" onclick="navigateDate(1)">›</button>
             </div>
-          ) : (
-            monthlyWins.map(({ date, wins }) => (
-              <div key={date} className="bg-green-50 border border-green-200 rounded-lg p-6">
-                <h3 className="font-semibold text-green-800 mb-3">
-                  {new Date(date).toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
-                </h3>
-                <ul className="space-y-2">
-                  {wins.map((win, index) => (
-                    <li key={index} className="flex items-start">
-                      <span className="text-green-600 font-bold mr-2">✓</span>
-                      <span className="text-green-700">{win}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))
-          )}
-        </div>
-
-        {monthlyWins.length > 0 && (
-          <div className="mt-8 bg-gray-50 p-6 rounded-lg">
-            <h3 className="font-semibold text-gray-800 mb-2">Month Summary</h3>
-            <p className="text-gray-600">
-              You recorded <strong>{monthlyWins.reduce((sum, { wins }) => sum + wins.length, 0)} wins</strong> across <strong>{monthlyWins.length} days</strong> in {monthName}.
-            </p>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (showMonthly) {
-    const monthDays = generateMonthlyCalendar();
-    const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    
-    return (
-      <div className="max-w-6xl mx-auto p-6 bg-white min-h-screen">
-        <div className="mb-6">
-          <button 
-            onClick={() => setShowMonthly(false)}
-            className="flex items-center text-blue-600 hover:text-blue-800 mb-4"
-          >
-            <ChevronLeft className="w-4 h-4 mr-2" />
-            Back to Journal
-          </button>
-          
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-4">
-              <button 
-                onClick={() => {
-                  const newDate = new Date(currentDate);
-                  newDate.setMonth(newDate.getMonth() - 1);
-                  setCurrentDate(newDate);
-                }} 
-                className="p-2 hover:bg-gray-100 rounded-full"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <h1 className="text-3xl font-bold text-gray-800">{monthName}</h1>
-              <button 
-                onClick={() => {
-                  const newDate = new Date(currentDate);
-                  newDate.setMonth(newDate.getMonth() + 1);
-                  setCurrentDate(newDate);
-                }} 
-                className="p-2 hover:bg-gray-100 rounded-full"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="nav-btn trends-btn" onclick="showTrends()">📈 Trends</button>
             </div>
-          </div>
         </div>
 
-        <div className="bg-white rounded-lg border">
-          <div className="grid grid-cols-7 bg-gray-50 border-b">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-              <div key={day} className="p-3 text-center font-medium text-gray-600 border-r last:border-r-0">
-                {day}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7">
-            {monthDays.map((day, index) => {
-              const entry = getEntryForDate(day);
-              const dayScore = calculateDayScore(entry);
-              const isCurrentMonth = day.getMonth() === currentDate.getMonth();
-              const isToday = day.toDateString() === new Date().toDateString();
-              
-              return (
-                <div 
-                  key={index} 
-                  className={`
-                    min-h-24 p-2 border-r border-b last:border-r-0 cursor-pointer hover:bg-gray-50
-                    ${!isCurrentMonth ? 'bg-gray-100 text-gray-400' : ''}
-                    ${isToday ? 'bg-blue-50 border-blue-200' : ''}
-                  `}
-                  onClick={() => {
-                    setCurrentDate(day);
-                    setShowMonthly(false);
-                  }}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className={`text-sm font-medium ${isToday ? 'text-blue-600' : ''}`}>
-                      {day.getDate()}
-                    </span>
-                    {entry && (
-                      <div className="flex space-x-1">
-                        <div 
-                          className={`w-2 h-2 rounded-full ${
-                            entry.energyLevel >= 5 ? 'bg-green-500' :
-                            entry.energyLevel >= 4 ? 'bg-yellow-500' :
-                            entry.energyLevel >= 3 ? 'bg-orange-500' :
-                            entry.energyLevel >= 2 ? 'bg-red-400' : 'bg-red-600'
-                          }`}
-                          title={`Energy: ${entry.energyLevel}/5`}
-                        />
-                        <div 
-                          className={`w-2 h-2 rounded-full ${
-                            dayScore >= 4 ? 'bg-purple-500' :
-                            dayScore >= 2.5 ? 'bg-purple-300' :
-                            dayScore > 0 ? 'bg-purple-200' : 'bg-gray-300'
-                          }`}
-                          title={`Completion score: ${dayScore.toFixed(1)}/5`}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  
-                  {entry && (
-                    <div className="text-xs space-y-1">
-                      {entry.morningPriorities.filter(p => p.trim()).slice(0, 2).map((priority, i) => (
-                        <div key={i} className="text-gray-600 truncate">
-                          • {priority}
-                        </div>
-                      ))}
-                      {entry.eveningWins.filter(w => w.trim()).slice(0, 1).map((win, i) => (
-                        <div key={i} className="text-green-600 truncate text-xs">
-                          ✓ {win}
-                        </div>
-                      ))}
+        <div id="mainView">
+            <div class="grid">
+                <div class="section morning">
+                    <h2><span class="emoji">🌅</span> Morning Focus</h2>
+                    <div class="field">
+                        <label class="label">Today's Top 3 Priorities</label>
+                        <input type="text" class="input" placeholder="Priority 1" id="priority1" oninput="autoSave()">
+                        <input type="text" class="input" placeholder="Priority 2" id="priority2" oninput="autoSave()">
+                        <input type="text" class="input" placeholder="Priority 3" id="priority3" oninput="autoSave()">
                     </div>
-                  )}
+                    <div class="field">
+                        <label class="label">I am grateful for...</label>
+                        <input type="text" class="input" placeholder="Grateful for 1" id="grateful1" oninput="autoSave()">
+                        <input type="text" class="input" placeholder="Grateful for 2" id="grateful2" oninput="autoSave()">
+                        <input type="text" class="input" placeholder="Grateful for 3" id="grateful3" oninput="autoSave()">
+                    </div>
+                    <div class="field">
+                        <label class="label">Daily Affirmation</label>
+                        <input type="text" class="input" placeholder="What would make today great?" id="affirmation" oninput="autoSave()">
+                    </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <h3 className="font-semibold text-blue-800">Active Days</h3>
-            <p className="text-2xl font-bold text-blue-600">
-              {Object.entries(entries).filter(([date]) => {
-                const entryDate = new Date(date);
-                return entryDate.getMonth() === currentDate.getMonth() && 
-                       entryDate.getFullYear() === currentDate.getFullYear();
-              }).length}
-            </p>
-          </div>
-          <div className="bg-green-50 p-4 rounded-lg">
-            <h3 className="font-semibold text-green-800">Avg Energy</h3>
-            <p className="text-2xl font-bold text-green-600">
-              {(() => {
-                const monthEntries = Object.entries(entries).filter(([date]) => {
-                  const entryDate = new Date(date);
-                  return entryDate.getMonth() === currentDate.getMonth() && 
-                         entryDate.getFullYear() === currentDate.getFullYear();
-                });
-                const avgEnergy = monthEntries.length > 0 
-                  ? monthEntries.reduce((sum, [, entry]) => sum + (entry.energyLevel || 3), 0) / monthEntries.length
-                  : 3;
-                return avgEnergy.toFixed(1);
-              })()}
-            </p>
-          </div>
-          <div 
-            className="bg-yellow-50 p-4 rounded-lg cursor-pointer hover:bg-yellow-100 transition-colors"
-            onClick={() => {
-              setSelectedMonth({ month: currentDate.getMonth(), year: currentDate.getFullYear() });
-              setShowWins(true);
-            }}
-          >
-            <h3 className="font-semibold text-yellow-800">Total Wins</h3>
-            <p className="text-2xl font-bold text-yellow-600">
-              {Object.entries(entries).filter(([date]) => {
-                const entryDate = new Date(date);
-                return entryDate.getMonth() === currentDate.getMonth() && 
-                       entryDate.getFullYear() === currentDate.getFullYear();
-              }).reduce((sum, [, entry]) => 
-                sum + entry.eveningWins.filter(w => w.trim()).length, 0)}
-            </p>
-            <p className="text-xs text-yellow-700 mt-1">Click to view all wins</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (showTrends) {
-    const trends = calculateTrends();
-    const recentEntries = Object.entries(entries)
-      .sort(([a], [b]) => new Date(b) - new Date(a))
-      .slice(0, 10);
-
-    return (
-      <div className="max-w-4xl mx-auto p-6 bg-white min-h-screen">
-        <div className="mb-6">
-          <button 
-            onClick={() => setShowTrends(false)}
-            className="flex items-center text-blue-600 hover:text-blue-800 mb-4"
-          >
-            <ChevronLeft className="w-4 h-4 mr-2" />
-            Back to Journal
-          </button>
-          
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Productivity Trends</h1>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-blue-800">Average Energy</h3>
-              <p className="text-2xl font-bold text-blue-600">{trends.avgEnergy}/5</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-green-800">Active Days</h3>
-              <p className="text-2xl font-bold text-green-600">{trends.completedEntries}/{trends.totalDays}</p>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-purple-800">Journal Streak</h3>
-              <p className="text-2xl font-bold text-purple-600">{Object.keys(entries).length}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold text-gray-800">Recent Entries</h2>
-          {recentEntries.map(([date, entry]) => (
-            <div key={date} className="border rounded-lg p-4 hover:bg-gray-50">
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-medium text-gray-800">
-                  {new Date(date).toLocaleDateString('en-US', { 
-                    weekday: 'short', 
-                    month: 'short', 
-                    day: 'numeric' 
-                  })}
-                </h3>
-                <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                  Energy: {entry.energyLevel}/5
-                </span>
-              </div>
-              
-              {entry.morningPriorities.filter(p => p.trim()).length > 0 && (
-                <div className="mb-2">
-                  <p className="text-sm font-medium text-gray-600">Top Priorities:</p>
-                  <ul className="text-sm text-gray-700 list-disc list-inside">
-                    {entry.morningPriorities.filter(p => p.trim()).map((priority, i) => (
-                      <li key={i}>{priority}</li>
-                    ))}
-                  </ul>
+                <div class="section evening">
+                    <h2><span class="emoji">🌙</span> Evening Reflection</h2>
+                    <div class="field">
+                        <label class="label">3 Amazing things that happened today</label>
+                        <input type="text" class="input" placeholder="Win 1" id="win1" oninput="autoSave()">
+                        <input type="text" class="input" placeholder="Win 2" id="win2" oninput="autoSave()">
+                        <input type="text" class="input" placeholder="Win 3" id="win3" oninput="autoSave()">
+                    </div>
+                    <div class="field">
+                        <label class="label">How could I have made today better?</label>
+                        <input type="text" class="input" placeholder="Improvement 1" id="improvement1" oninput="autoSave()">
+                        <input type="text" class="input" placeholder="Improvement 2" id="improvement2" oninput="autoSave()">
+                    </div>
+                    <div class="field">
+                        <label class="label">Energy Level (1=Very Low, 5=Very High)</label>
+                        <div class="energy-buttons">
+                            <button class="energy-btn" onclick="setEnergy(1)" id="energy1">1</button>
+                            <button class="energy-btn" onclick="setEnergy(2)" id="energy2">2</button>
+                            <button class="energy-btn" onclick="setEnergy(3)" id="energy3">3</button>
+                            <button class="energy-btn" onclick="setEnergy(4)" id="energy4">4</button>
+                            <button class="energy-btn" onclick="setEnergy(5)" id="energy5">5</button>
+                        </div>
+                        <div class="energy-level" id="energyLabel">Moderate Energy</div>
+                    </div>
                 </div>
-              )}
-              
-              {entry.eveningWins.filter(w => w.trim()).length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Key Wins:</p>
-                  <ul className="text-sm text-gray-700 list-disc list-inside">
-                    {entry.eveningWins.filter(w => w.trim()).map((win, i) => (
-                      <li key={i}>{win}</li>
-                    ))}
-                  </ul>
+            </div>
+
+            <div class="section tomorrow">
+                <h2><span class="emoji">🚀</span> Tomorrow's Focus</h2>
+                <div class="field">
+                    <label class="label">Top 3 priorities for tomorrow</label>
+                    <input type="text" class="input" placeholder="Tomorrow's priority 1" id="tomorrow1" oninput="autoSave()">
+                    <input type="text" class="input" placeholder="Tomorrow's priority 2" id="tomorrow2" oninput="autoSave()">
+                    <input type="text" class="input" placeholder="Tomorrow's priority 3" id="tomorrow3" oninput="autoSave()">
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-4xl mx-auto p-6 bg-white min-h-screen">
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center space-x-4">
-          <button onClick={() => navigateDate(-1)} className="p-2 hover:bg-gray-100 rounded-full">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <h1 className="text-2xl font-bold text-gray-800">{formatDisplayDate(currentDate)}</h1>
-          <button onClick={() => navigateDate(1)} className="p-2 hover:bg-gray-100 rounded-full">
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-        
-        <div className="flex space-x-2">
-          <button 
-            onClick={() => setShowMonthly(true)}
-            className="flex items-center px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
-          >
-            <Grid className="w-4 h-4 mr-2" />
-            Monthly
-          </button>
-          <button 
-            onClick={() => setShowTrends(true)}
-            className="flex items-center px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-          >
-            <TrendingUp className="w-4 h-4 mr-2" />
-            Trends
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-yellow-50 p-6 rounded-lg">
-          <h2 className="text-xl font-semibold text-yellow-800 mb-4 flex items-center">
-            <span className="mr-2">🌅</span>
-            Morning Focus
-          </h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-yellow-700 mb-2">
-                Today's Top 3 Priorities
-              </label>
-              {currentEntry.morningPriorities.map((priority, index) => (
-                <input
-                  key={index}
-                  type="text"
-                  value={priority}
-                  onChange={(e) => updateArrayField('morningPriorities', index, e.target.value)}
-                  className="w-full p-2 border border-yellow-200 rounded mb-2 focus:border-yellow-400 focus:outline-none"
-                  placeholder={`Priority ${index + 1}`}
-                />
-              ))}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-yellow-700 mb-2">
-                I am grateful for...
-              </label>
-              {currentEntry.gratefulFor.map((item, index) => (
-                <input
-                  key={index}
-                  type="text"
-                  value={item}
-                  onChange={(e) => updateArrayField('gratefulFor', index, e.target.value)}
-                  className="w-full p-2 border border-yellow-200 rounded mb-2 focus:border-yellow-400 focus:outline-none"
-                  placeholder={`Grateful for ${index + 1}`}
-                />
-              ))}
+            <div class="section notes">
+                <h2><span class="emoji">✏️</span> Additional Notes</h2>
+                <div class="field">
+                    <textarea class="textarea" rows="4" placeholder="Any additional thoughts, insights, or observations from today..." id="notes" oninput="autoSave()"></textarea>
+                </div>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-yellow-700 mb-2">
-                Daily Affirmation
-              </label>
-              <input
-                type="text"
-                value={currentEntry.affirmation}
-                onChange={(e) => updateField('affirmation', e.target.value)}
-                className="w-full p-2 border border-yellow-200 rounded focus:border-yellow-400 focus:outline-none"
-                placeholder="What would make today great?"
-              />
-            </div>
-          </div>
         </div>
 
-        <div className="bg-purple-50 p-6 rounded-lg">
-          <h2 className="text-xl font-semibold text-purple-800 mb-4 flex items-center">
-            <span className="mr-2">🌙</span>
-            Evening Reflection
-          </h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-purple-700 mb-2">
-                3 Amazing things that happened today
-              </label>
-              {currentEntry.eveningWins.map((win, index) => (
-                <input
-                  key={index}
-                  type="text"
-                  value={win}
-                  onChange={(e) => updateArrayField('eveningWins', index, e.target.value)}
-                  className="w-full p-2 border border-purple-200 rounded mb-2 focus:border-purple-400 focus:outline-none"
-                  placeholder={`Win ${index + 1}`}
-                />
-              ))}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-purple-700 mb-2">
-                How could I have made today better?
-              </label>
-              {currentEntry.improvements.map((improvement, index) => (
-                <input
-                  key={index}
-                  type="text"
-                  value={improvement}
-                  onChange={(e) => updateArrayField('improvements', index, e.target.value)}
-                  className="w-full p-2 border border-purple-200 rounded mb-2 focus:border-purple-400 focus:outline-none"
-                  placeholder={`Improvement ${index + 1}`}
-                />
-              ))}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-purple-700 mb-2">
-                Energy Level (1=Very Low, 5=Very High)
-              </label>
-              <div className="flex space-x-2">
-                {[1, 2, 3, 4, 5].map(level => (
-                  <button
-                    key={level}
-                    onClick={() => updateField('energyLevel', level)}
-                    className={`
-                      flex-1 py-3 px-4 rounded-lg font-medium transition-colors
-                      ${currentEntry.energyLevel === level
-                        ? level === 5 ? 'bg-green-500 text-white'
-                        : level === 4 ? 'bg-yellow-500 text-white'
-                        : level === 3 ? 'bg-orange-500 text-white'
-                        : level === 2 ? 'bg-red-400 text-white'
-                        : 'bg-red-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }
-                    `}
-                  >
-                    {level}
-                  </button>
-                ))}
-              </div>
-              <div className="text-center text-purple-600 font-medium mt-2">
-                {currentEntry.energyLevel === 5 ? 'Very High Energy' :
-                 currentEntry.energyLevel === 4 ? 'High Energy' :
-                 currentEntry.energyLevel === 3 ? 'Moderate Energy' :
-                 currentEntry.energyLevel === 2 ? 'Low Energy' : 'Very Low Energy'}
-              </div>
-            </div>
-          </div>
+        <div id="trendsView" style="display: none;" class="trends-view">
+            <button class="back-btn" onclick="showMain()">← Back to Journal</button>
+            <h1 style="font-size: 2rem; font-weight: bold; margin-bottom: 2rem;">Productivity Trends</h1>
+            <div id="trendsContent"></div>
         </div>
-      </div>
-
-      <div className="mt-6 bg-green-50 p-6 rounded-lg">
-        <h2 className="text-xl font-semibold text-green-800 mb-4 flex items-center">
-          <span className="mr-2">🚀</span>
-          Tomorrow's Focus
-        </h2>
-        <div>
-          <label className="block text-sm font-medium text-green-700 mb-2">
-            Top 3 priorities for tomorrow
-          </label>
-          {currentEntry.tomorrowFocus.map((focus, index) => (
-            <input
-              key={index}
-              type="text"
-              value={focus}
-              onChange={(e) => updateArrayField('tomorrowFocus', index, e.target.value)}
-              className="w-full p-2 border border-green-200 rounded mb-2 focus:border-green-400 focus:outline-none"
-              placeholder={`Tomorrow's priority ${index + 1}`}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-6 bg-gray-50 p-6 rounded-lg">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-          <Edit3 className="w-5 h-5 mr-2" />
-          Additional Notes
-        </h2>
-        <textarea
-          value={currentEntry.notes}
-          onChange={(e) => updateField('notes', e.target.value)}
-          className="w-full p-3 border border-gray-200 rounded focus:border-gray-400 focus:outline-none"
-          rows="4"
-          placeholder="Any additional thoughts, insights, or observations from today..."
-        />
-      </div>
     </div>
-  );
-};
 
-export default DailyProductivityJournal;
+    <script>
+        let currentDate = new Date();
+        let entries = {};
+        let currentEntry = {
+            morningPriorities: ['', '', ''],
+            gratefulFor: ['', '', ''],
+            affirmation: '',
+            eveningWins: ['', '', ''],
+            improvements: ['', ''],
+            tomorrowFocus: ['', '', ''],
+            energyLevel: 3,
+            notes: ''
+        };
+        let autoSaveTimeout;
+
+        // Load data from localStorage
+        function loadData() {
+            try {
+                const saved = localStorage.getItem('productivity-journal-entries');
+                if (saved) {
+                    entries = JSON.parse(saved);
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        // Save data to localStorage
+        function saveData() {
+            try {
+                localStorage.setItem('productivity-journal-entries', JSON.stringify(entries));
+            } catch (error) {
+                console.error('Error saving data:', error);
+            }
+        }
+
+        // Format date for storage key
+        function formatDate(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        // Format date for display
+        function formatDisplayDate(date) {
+            return date.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+        }
+
+        // Update the current entry object from form fields
+        function updateCurrentEntry() {
+            currentEntry = {
+                morningPriorities: [
+                    document.getElementById('priority1').value,
+                    document.getElementById('priority2').value,
+                    document.getElementById('priority3').value
+                ],
+                gratefulFor: [
+                    document.getElementById('grateful1').value,
+                    document.getElementById('grateful2').value,
+                    document.getElementById('grateful3').value
+                ],
+                affirmation: document.getElementById('affirmation').value,
+                eveningWins: [
+                    document.getElementById('win1').value,
+                    document.getElementById('win2').value,
+                    document.getElementById('win3').value
+                ],
+                improvements: [
+                    document.getElementById('improvement1').value,
+                    document.getElementById('improvement2').value
+                ],
+                tomorrowFocus: [
+                    document.getElementById('tomorrow1').value,
+                    document.getElementById('tomorrow2').value,
+                    document.getElementById('tomorrow3').value
+                ],
+                energyLevel: currentEntry.energyLevel,
+                notes: document.getElementById('notes').value
+            };
+        }
+
+        // Load entry for current date
+        function loadCurrentEntry() {
+            const dateKey = formatDate(currentDate);
+            
+            if (entries[dateKey]) {
+                currentEntry = entries[dateKey];
+            } else {
+                // Check if yesterday has tomorrow's focus for today
+                const yesterday = new Date(currentDate);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayKey = formatDate(yesterday);
+                const yesterdayEntry = entries[yesterdayKey];
+                
+                currentEntry = {
+                    morningPriorities: ['', '', ''],
+                    gratefulFor: ['', '', ''],
+                    affirmation: '',
+                    eveningWins: ['', '', ''],
+                    improvements: ['', ''],
+                    tomorrowFocus: ['', '', ''],
+                    energyLevel: 3,
+                    notes: ''
+                };
+
+                // If yesterday has tomorrow's focus, use those as today's priorities
+                if (yesterdayEntry && yesterdayEntry.tomorrowFocus.some(focus => focus.trim())) {
+                    currentEntry.morningPriorities = [
+                        yesterdayEntry.tomorrowFocus[0] || '',
+                        yesterdayEntry.tomorrowFocus[1] || '',
+                        yesterdayEntry.tomorrowFocus[2] || ''
+                    ];
+                }
+            }
+
+            // Update form fields
+            document.getElementById('priority1').value = currentEntry.morningPriorities[0] || '';
+            document.getElementById('priority2').value = currentEntry.morningPriorities[1] || '';
+            document.getElementById('priority3').value = currentEntry.morningPriorities[2] || '';
+            document.getElementById('grateful1').value = currentEntry.gratefulFor[0] || '';
+            document.getElementById('grateful2').value = currentEntry.gratefulFor[1] || '';
+            document.getElementById('grateful3').value = currentEntry.gratefulFor[2] || '';
+            document.getElementById('affirmation').value = currentEntry.affirmation || '';
+            document.getElementById('win1').value = currentEntry.eveningWins[0] || '';
+            document.getElementById('win2').value = currentEntry.eveningWins[1] || '';
+            document.getElementById('win3').value = currentEntry.eveningWins[2] || '';
+            document.getElementById('improvement1').value = currentEntry.improvements[0] || '';
+            document.getElementById('improvement2').value = currentEntry.improvements[1] || '';
+            document.getElementById('tomorrow1').value = currentEntry.tomorrowFocus[0] || '';
+            document.getElementById('tomorrow2').value = currentEntry.tomorrowFocus[1] || '';
+            document.getElementById('tomorrow3').value = currentEntry.tomorrowFocus[2] || '';
+            document.getElementById('notes').value = currentEntry.notes || '';
+            
+            setEnergy(currentEntry.energyLevel || 3);
+        }
+
+        // Auto-save functionality
+        function autoSave() {
+            clearTimeout(autoSaveTimeout);
+            autoSaveTimeout = setTimeout(() => {
+                updateCurrentEntry();
+                
+                // Check if there's any content
+                const hasContent = currentEntry.morningPriorities.some(p => p.trim()) ||
+                                 currentEntry.gratefulFor.some(g => g.trim()) ||
+                                 currentEntry.affirmation.trim() ||
+                                 currentEntry.eveningWins.some(w => w.trim()) ||
+                                 currentEntry.improvements.some(i => i.trim()) ||
+                                 currentEntry.tomorrowFocus.some(t => t.trim()) ||
+                                 currentEntry.notes.trim();
+                
+                if (hasContent) {
+                    const dateKey = formatDate(currentDate);
+                    entries[dateKey] = { ...currentEntry, lastUpdated: new Date().toISOString() };
+                    saveData();
+                }
+            }, 1000);
+        }
+
+        // Navigate to different date
+        function navigateDate(direction) {
+            updateCurrentEntry();
+            const dateKey = formatDate(currentDate);
+            
+            // Save current entry if it has content
+            const hasContent = currentEntry.morningPriorities.some(p => p.trim()) ||
+                             currentEntry.gratefulFor.some(g => g.trim()) ||
+                             currentEntry.affirmation.trim() ||
+                             currentEntry.eveningWins.some(w => w.trim()) ||
+                             currentEntry.improvements.some(i => i.trim()) ||
+                             currentEntry.tomorrowFocus.some(t => t.trim()) ||
+                             currentEntry.notes.trim();
+            
+            if (hasContent) {
+                entries[dateKey] = { ...currentEntry, lastUpdated: new Date().toISOString() };
+                saveData();
+            }
+
+            currentDate.setDate(currentDate.getDate() + direction);
+            updateDisplay();
+            loadCurrentEntry();
+        }
+
+        // Set energy level
+        function setEnergy(level) {
+            currentEntry.energyLevel = level;
+            
+            // Update button styles
+            for (let i = 1; i <= 5; i++) {
+                const btn = document.getElementById(`energy${i}`);
+                btn.className = `energy-btn ${i === level ? `energy-${i}` : 'energy-unselected'}`;
+            }
+            
+            // Update label
+            const labels = {
+                1: 'Very Low Energy',
+                2: 'Low Energy', 
+                3: 'Moderate Energy',
+                4: 'High Energy',
+                5: 'Very High Energy'
+            };
+            document.getElementById('energyLabel').textContent = labels[level];
+            
+            autoSave();
+        }
+
+        // Show trends view
+        function showTrends() {
+            document.getElementById('mainView').style.display = 'none';
+            document.getElementById('trendsView').style.display = 'block';
+            
+            // Generate trends content
+            const recentEntries = Object.entries(entries)
+                .sort(([a], [b]) => new Date(b) - new Date(a))
+                .slice(0, 10);
+            
+            let html = '';
+            
+            if (recentEntries.length === 0) {
+                html = '<p style="text-align: center; color: #6b7280; font-size: 1.125rem; margin-top: 3rem;">No entries yet. Start journaling to see your trends!</p>';
+            } else {
+                recentEntries.forEach(([date, entry]) => {
+                    const displayDate = new Date(date).toLocaleDateString('en-US', { 
+                        weekday: 'short', 
+                        month: 'short', 
+                        day: 'numeric' 
+                    });
+                    
+                    html += `
+                        <div class="entry-card">
+                            <div class="entry-header">
+                                <div class="entry-date">${displayDate}</div>
+                                <div class="energy-badge">Energy: ${entry.energyLevel}/5</div>
+                            </div>`;
+                    
+                    const priorities = entry.morningPriorities.filter(p => p.trim());
+                    if (priorities.length > 0) {
+                        html += `
+                            <div class="entry-section">
+                                <div class="entry-title">Top Priorities:</div>
+                                <ul class="entry-list">
+                                    ${priorities.map(p => `<li>${p}</li>`).join('')}
+                                </ul>
+                            </div>`;
+                    }
+                    
+                    const wins = entry.eveningWins.filter(w => w.trim());
+                    if (wins.length > 0) {
+                        html += `
+                            <div class="entry-section">
+                                <div class="entry-title">Key Wins:</div>
+                                <ul class="entry-list">
+                                    ${wins.map(w => `<li>${w}</li>`).join('')}
+                                </ul>
+                            </div>`;
+                    }
+                    
+                    html += '</div>';
+                });
+            }
+            
+            document.getElementById('trendsContent').innerHTML = html;
+        }
+
+        // Show main view
+        function showMain() {
+            document.getElementById('trendsView').style.display = 'none';
+            document.getElementById('mainView').style.display = 'block';
+        }
+
+        // Update display
+        function updateDisplay() {
+            document.getElementById('currentDateDisplay').textContent = formatDisplayDate(currentDate);
+        }
+
+        // Initialize app
+        function init() {
+            loadData();
+            updateDisplay();
+            loadCurrentEntry();
+        }
+
+        // Start the app when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
